@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import azure.functions as func
 from .database import get_question_data
 from .responses import create_error_response, create_parameter_missing_response, create_invalid_format_response
@@ -24,7 +25,7 @@ def process_request_parameters(req: func.HttpRequest):
             )
 
         from .utils import get_grade_international
-        print(f"🔍 ID:{sql_params['id']}에서 가져온 파라미터: {get_grade_international(sql_params['grade'])} {sql_params['term']}학기 - {sql_params['topic_name']} ({sql_params['question_type']}, 난이도{sql_params['difficulty']})")
+        print(f"[파라미터] ID:{sql_params['id']}에서 가져온 정보: {get_grade_international(sql_params['grade'])} {sql_params['term']}학기 - {sql_params['topic_name']} ({sql_params['question_type']}, 난이도{sql_params['difficulty']})")
         return {
             'grade': sql_params['grade'],
             'term': sql_params['term'],

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import logging
 from .database import get_question_data, get_sql_connection
 from .ai_service import get_openai_client, generate_question_with_ai
@@ -55,7 +56,7 @@ def handle_bulk_generation(req):
                 status_code=500
             )
 
-        print("🚀 대량 문제 생성 시작 (총 20개)")
+        print("[대량 생성] 문제 생성 시작 (총 20개)")
         print("=" * 80)
 
         client = get_openai_client()
@@ -63,7 +64,7 @@ def handle_bulk_generation(req):
 
         for set_idx, params in enumerate(param_sets, 1):
             from .utils import get_grade_international
-            print(f"\n📋 세트 {set_idx}/4 - ID:{params['id']}에서 가져온 파라미터")
+            print(f"\n[세트 {set_idx}/4] ID:{params['id']}에서 가져온 파라미터")
             print(f"   {get_grade_international(params['grade'])} {params['term']}학기 - {params['topic_name']} ({params['question_type']}, 난이도{params['difficulty']})")
 
             # 해당 주제의 기존 문제들 가져오기
@@ -111,14 +112,14 @@ def handle_bulk_generation(req):
 
                     # 간단한 디버그 출력
                     total_count = (set_idx - 1) * 5 + len(set_questions)
-                    print(f"   ✅ {total_count:2d}/20 - {question_data['question_text'][:50]}...")
+                    print(f"   [성공] {total_count:2d}/20 - {question_data['question_text'][:50]}...")
                 else:
                     logging.warning(f"Question validation failed for set {set_idx}, question {i+1}")
 
-            print(f"   📊 세트 {set_idx} 완료: {len(set_questions)}/5개 문제 생성")
+            print(f"   [세트 완료] 세트 {set_idx}: {len(set_questions)}/5개 문제 생성")
 
         print("\n" + "=" * 80)
-        print(f"🎯 대량 생성 완료: 총 {len(all_generated_questions)}/20개 문제")
+        print(f"[대량 생성 완료] 총 {len(all_generated_questions)}/20개 문제")
         print("=" * 80)
 
         # 요약 정보 생성

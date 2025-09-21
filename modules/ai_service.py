@@ -17,19 +17,33 @@ def create_question_prompt(grade, term, topic_name, question_type, difficulty, e
     """문제 생성용 프롬프트 작성"""
     from .utils import get_grade_description
 
-    svg_instructions = ""
-    if include_svg:
-        svg_instructions = """
-    SVG 도형 생성 지침:
-    - 기하 문제의 경우 정확한 SVG 코드를 생성하세요
-    - 교육용으로 적합한 깔끔한 스타일 (선 굵기, 색상 등)
-    - 길이, 각도, 좌표 등을 명확히 표시
-    - SVG 크기는 300x200 이내로 제한
-    - 검은색 선 (#000), 회색 채우기 (#f0f0f0) 권장
+    # AI가 스스로 판단해서 SVG 생성하도록 지침 제공
+    svg_instructions = """
+
+    다음 경우에는 반드시 SVG를 생성하세요:
+    - 삼각형, 사각형, 원 등 구체적인 도형이 나오는 기하 문제
+    - 일차함수, 이차함수의 그래프를 그리거나 해석하는 문제
+    - 좌표평면에서 점의 위치나 거리를 구하는 문제
+    - 막대그래프, 원그래프 등 통계 차트 관련 문제
+    - 각도, 길이, 넓이 등을 시각적으로 확인해야 하는 문제
+    
+    SVG 생성 기준:
+    - 위 유형의 문제라면 적극적으로 SVG 생성
+    - 학생의 이해를 돕는 시각적 자료 제공
+    
+    SVG 사양:
+    - 크기: width="300" height="200" 
+    - 스타일: 검은색 선(#000), 회색 채우기(#f0f0f0), Arial 12px
+    - 중요 수치와 라벨 명확히 표시
+    
+    **중요**: 
+    - 해설용 SVG는 생성하지 마세요 (문제 풀이용만)
+    - 순수 계산 문제(연산, 방정식 풀이 등)만 svg_code를 null로 설정
+    - 조금이라도 시각적 요소가 있다면 SVG를 생성하세요
     """
 
-    if include_svg:
-        response_format = f"""
+    # 항상 SVG 포함 가능한 응답 형식 사용
+    response_format = f"""
     응답 형식 (JSON):
     {{
         "question_text": "문제 내용 (LaTeX 수식 포함)",
@@ -37,18 +51,7 @@ def create_question_prompt(grade, term, topic_name, question_type, difficulty, e
         "choices": ["① 선택지1", "② 선택지2", "③ 선택지3", "④ 선택지4", "⑤ 선택지5"] (선택형인 경우만),
         "correct_answer": "정답 (①~⑤ 또는 숫자/식)",
         "answer_explanation": "상세한 풀이 과정 (LaTeX 수식 포함)",
-        "svg_code": "<svg>...</svg> (도형이 필요한 문제인 경우만)"
-    }}
-    """
-    else:
-        response_format = f"""
-    응답 형식 (JSON):
-    {{
-        "question_text": "문제 내용 (LaTeX 수식 포함)",
-        "question_type": "{question_type}",
-        "choices": ["① 선택지1", "② 선택지2", "③ 선택지3", "④ 선택지4", "⑤ 선택지5"] (선택형인 경우만),
-        "correct_answer": "정답 (①~⑤ 또는 숫자/식)",
-        "answer_explanation": "상세한 풀이 과정 (LaTeX 수식 포함)"
+        "svg_code": "<svg>...</svg> 또는 null (문제 풀이에 시각 자료가 필요한 경우만)"
     }}
     """
 

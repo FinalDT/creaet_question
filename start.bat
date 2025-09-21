@@ -1,0 +1,9 @@
+@echo off
+echo Azure Functions 시작 중...
+echo.
+echo 가상환경 활성화...
+call .venv\Scripts\activate.bat
+echo.
+echo Azure Functions 시작...
+func start
+pause
