@@ -1,26 +1,26 @@
-import azure.functions as func
 import json
 
 
 def create_error_response(error_message, status_code=400, **extra_data):
-    """에러 응답 생성"""
-    response_data = {"error": error_message}
+    """에러 응답 생성 (딕셔너리 반환)"""
+    response_data = {
+        "error": error_message,
+        "status_code": status_code
+    }
     response_data.update(extra_data)
-
-    return func.HttpResponse(
-        json.dumps(response_data, ensure_ascii=False),
-        status_code=status_code,
-        mimetype="application/json"
-    )
+    return response_data
 
 
 def create_success_response(data, status_code=200):
-    """성공 응답 생성"""
-    return func.HttpResponse(
-        json.dumps(data, ensure_ascii=False),
-        status_code=status_code,
-        mimetype="application/json"
-    )
+    """성공 응답 생성 (딕셔너리 반환)"""
+    if isinstance(data, dict):
+        data["status_code"] = status_code
+        return data
+    else:
+        return {
+            "data": data,
+            "status_code": status_code
+        }
 
 
 def create_parameter_missing_response():

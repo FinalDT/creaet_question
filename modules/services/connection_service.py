@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 import os
-from .database import get_sql_connection
-from .ai_service import test_ai_connection
-from .responses import create_success_response
-from .debug import print_connection_test_header, print_connection_test_summary
+import json
+import azure.functions as func
+from ..core.database import get_sql_connection
+from ..core.ai_service import test_ai_connection
+from ..core.responses import create_success_response
+from ..core.debug import print_connection_test_header, print_connection_test_summary
 
 
 def handle_test_connections(req):
@@ -51,4 +53,9 @@ def handle_test_connections(req):
         print(f"   ❌ SQL Server connection: FAILED - {str(e)}")
 
     print_connection_test_summary(results)
-    return create_success_response(results)
+    response_data = create_success_response(results)
+    return func.HttpResponse(
+        json.dumps(response_data, ensure_ascii=False),
+        status_code=200,
+        headers={"Content-Type": "application/json; charset=utf-8"}
+    )

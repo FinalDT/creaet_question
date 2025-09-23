@@ -2,11 +2,19 @@ import pyodbc
 import logging
 import os
 
+# 전역 캐시 변수
+CONCEPT_NAMES_CACHE = []
+CONCEPT_MAPPING_CACHE = {}
+
 
 def get_sql_connection():
     """SQL Server 연결 초기화"""
     try:
         conn = pyodbc.connect(os.environ["SQL_CONNECTION"])
+        # 한글 처리를 위한 설정
+        conn.setdecoding(pyodbc.SQL_CHAR, encoding='utf-8')
+        conn.setdecoding(pyodbc.SQL_WCHAR, encoding='utf-8')
+        conn.setencoding(encoding='utf-8')
         return conn
     except Exception as e:
         logging.error(f"SQL connection error: {str(e)}")
@@ -151,3 +159,83 @@ def save_to_database(question_record, answer_record):
             conn.rollback()
             conn.close()
         return False
+
+
+def load_concept_names():
+    """gold_knowledgeTag 테이블에서 concept_name 목록 로드"""
+    global CONCEPT_NAMES_CACHE, CONCEPT_MAPPING_CACHE
+
+    try:
+        conn = get_sql_connection()
+        if not conn:
+            logging.error("Failed to connect to database for concept names")
+            return False
+
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT DISTINCT knowledgeTag, concept_name
+            FROM gold.gold_knowledgeTag
+            WHERE concept_name IS NOT NULL
+            ORDER BY concept_name
+        """)
+
+        results = cursor.fetchall()
+        conn.close()
+
+        if results:
+            CONCEPT_NAMES_CACHE = [row[1] for row in results]  # concept_name만
+            CONCEPT_MAPPING_CACHE = {row[1]: row[0] for row in results}  # concept_name -> knowledgeTag
+
+            logging.info(f"Loaded {len(CONCEPT_NAMES_CACHE)} concept names into cache")
+            return True
+        else:
+            logging.warning("No concept names found in gold_knowledgeTag table")
+            return False
+
+    except Exception as e:
+        logging.error(f"Error loading concept names: {str(e)}")
+        return False
+
+
+def get_cached_concept_names():
+    """캐시된 concept_name 목록 반환"""
+    global CONCEPT_NAMES_CACHE
+
+    if not CONCEPT_NAMES_CACHE:
+        load_concept_names()
+
+    return CONCEPT_NAMES_CACHE
+
+
+def get_knowledge_tag_by_concept(concept_name):
+    """concept_name으로 knowledgeTag 조회"""
+    global CONCEPT_MAPPING_CACHE
+
+    if not CONCEPT_MAPPING_CACHE:
+        load_concept_names()
+
+    return CONCEPT_MAPPING_CACHE.get(concept_name, None)
+
+
+def get_mapped_concept_name(topic_name):
+    """questions_dim에서 topic_name에 매핑된 concept_by_ai 조회"""
+    try:
+        conn = get_sql_connection()
+        if not conn:
+            return None
+
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT TOP 1 concept_by_ai
+            FROM questions_dim
+            WHERE question_topic_name = ? AND concept_by_ai IS NOT NULL
+        """, topic_name)
+
+        result = cursor.fetchone()
+        conn.close()
+
+        return result[0] if result else None
+
+    except Exception as e:
+        logging.error(f"Error getting mapped concept name: {str(e)}")
+        return None

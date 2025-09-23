@@ -1,11 +1,13 @@
 import logging
-from .database import get_question_data
-from .ai_service import get_openai_client, generate_question_with_ai
-from .validation import validate_question_format, prepare_question_record, prepare_answer_record
-from .utils import generate_question_id
-from .params import process_request_parameters
-from .responses import create_question_success_response, create_question_failed_response, create_error_response
-from .debug import print_question_result
+import json
+import azure.functions as func
+from ..core.database import get_question_data
+from ..core.ai_service import get_openai_client, generate_question_with_ai
+from ..core.validation import validate_question_format, prepare_question_record, prepare_answer_record
+from ..core.utils import generate_question_id
+from ..core.params import process_request_parameters
+from ..core.responses import create_question_success_response, create_question_failed_response, create_error_response
+from ..core.debug import print_question_result
 
 
 def handle_create_question(req):
@@ -16,7 +18,11 @@ def handle_create_question(req):
         # 파라미터 처리
         params, error_response = process_request_parameters(req)
         if error_response:
-            return error_response
+            return func.HttpResponse(
+                json.dumps(error_response, ensure_ascii=False),
+                status_code=error_response.get('status_code', 400),
+                headers={"Content-Type": "application/json; charset=utf-8"}
+            )
 
         # 기존 문제들 가져오기
         existing_questions = get_question_data("questions", params['topic_name'])
@@ -59,10 +65,25 @@ def handle_create_question(req):
 
         # 응답 반환
         if generated_questions:
-            return create_question_success_response(generated_questions)
+            response_data = create_question_success_response(generated_questions)
+            return func.HttpResponse(
+                json.dumps(response_data, ensure_ascii=False),
+                status_code=200,
+                headers={"Content-Type": "application/json; charset=utf-8"}
+            )
         else:
-            return create_question_failed_response()
+            response_data = create_question_failed_response()
+            return func.HttpResponse(
+                json.dumps(response_data, ensure_ascii=False),
+                status_code=400,
+                headers={"Content-Type": "application/json; charset=utf-8"}
+            )
 
     except Exception as e:
         logging.error(f"Error in create_question: {str(e)}")
-        return create_error_response(f"Failed to create question: {str(e)}", status_code=500)
+        response_data = create_error_response(f"Failed to create question: {str(e)}", status_code=500)
+        return func.HttpResponse(
+            json.dumps(response_data, ensure_ascii=False),
+            status_code=500,
+            headers={"Content-Type": "application/json; charset=utf-8"}
+        )

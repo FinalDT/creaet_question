@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
 import logging
-from .database import get_question_data, get_sql_connection
-from .ai_service import get_openai_client, generate_question_with_ai
-from .validation import validate_question_format, prepare_question_record, prepare_answer_record
-from .utils import generate_question_id
-from .responses import create_success_response, create_error_response
-from .debug import print_question_result
+import json
+import azure.functions as func
+from ..core.database import get_question_data, get_sql_connection, get_knowledge_tag_by_concept, get_mapped_concept_name
+from ..core.ai_service import get_openai_client, generate_question_with_ai
+from ..core.validation import validate_question_format, prepare_question_record, prepare_answer_record
+from ..core.utils import generate_question_id
+from ..core.responses import create_success_response, create_error_response
+from ..core.debug import print_question_result
 
 
 def get_multiple_question_params(limit=4):
@@ -51,9 +53,14 @@ def handle_bulk_generation(req):
         # 4개의 서로 다른 파라미터 세트 가져오기
         param_sets = get_multiple_question_params(4)
         if not param_sets:
-            return create_error_response(
+            response_data = create_error_response(
                 "Failed to get question parameters from SQL",
                 status_code=500
+            )
+            return func.HttpResponse(
+                json.dumps(response_data, ensure_ascii=False),
+                status_code=500,
+                headers={"Content-Type": "application/json; charset=utf-8"}
             )
 
         print("[대량 생성] 문제 생성 시작 (총 20개)")
@@ -63,7 +70,7 @@ def handle_bulk_generation(req):
         all_generated_questions = []
 
         for set_idx, params in enumerate(param_sets, 1):
-            from .utils import get_grade_international
+            from ..core.utils import get_grade_international
             print(f"\n[세트 {set_idx}/4] ID:{params['id']}에서 가져온 파라미터")
             print(f"   {get_grade_international(params['grade'])} {params['term']}학기 - {params['topic_name']} ({params['question_type']}, 난이도{params['difficulty']})")
 
@@ -83,6 +90,10 @@ def handle_bulk_generation(req):
                 if question_data and validate_question_format(question_data, params['question_type']):
                     question_id = generate_question_id()
 
+                    # DB에서 미리 매핑된 concept_name 조회
+                    recommended_concept = get_mapped_concept_name(params['topic_name'])
+                    knowledge_tag = get_knowledge_tag_by_concept(recommended_concept) if recommended_concept else None
+
                     # DB 저장 준비 (현재 비활성화)
                     question_record = prepare_question_record(
                         question_id, params['grade'], params['term'], params['topic_name'],
@@ -100,7 +111,9 @@ def handle_bulk_generation(req):
                             "term": params['term'],
                             "topic_name": params['topic_name'],
                             "difficulty": params['difficulty'],
-                            "set_number": set_idx
+                            "set_number": set_idx,
+                            "mapped_concept_name": recommended_concept,
+                            "knowledge_tag": knowledge_tag
                         }
                     }
 
@@ -110,9 +123,13 @@ def handle_bulk_generation(req):
                     # 생성된 문제를 추적 리스트에 추가
                     generated_problems.append(question_data['question_text'][:100])
 
-                    # 간단한 디버그 출력
+                    # 상세한 디버그 출력
                     total_count = (set_idx - 1) * 5 + len(set_questions)
                     print(f"   [성공] {total_count:2d}/20 - {question_data['question_text'][:50]}...")
+                    print(f"          기존 topic_name: {params['topic_name']}")
+                    print(f"          매핑된 concept_name: {recommended_concept or '매핑없음'}")
+                    print(f"          매핑된 knowledgeTag: {knowledge_tag}")
+                    print()
                 else:
                     logging.warning(f"Question validation failed for set {set_idx}, question {i+1}")
 
@@ -133,7 +150,7 @@ def handle_bulk_generation(req):
             ]
         }
 
-        return create_success_response({
+        response_data = create_success_response({
             "success": True,
             "generated_questions": all_generated_questions,
             "summary": summary,
@@ -142,7 +159,17 @@ def handle_bulk_generation(req):
                 "db_storage": "disabled_for_testing"
             }
         })
+        return func.HttpResponse(
+            json.dumps(response_data, ensure_ascii=False),
+            status_code=200,
+            headers={"Content-Type": "application/json; charset=utf-8"}
+        )
 
     except Exception as e:
         logging.error(f"Error in bulk generation: {str(e)}")
-        return create_error_response(f"Failed to generate bulk questions: {str(e)}", status_code=500)
+        response_data = create_error_response(f"Failed to generate bulk questions: {str(e)}", status_code=500)
+        return func.HttpResponse(
+            json.dumps(response_data, ensure_ascii=False),
+            status_code=500,
+            headers={"Content-Type": "application/json; charset=utf-8"}
+        )
