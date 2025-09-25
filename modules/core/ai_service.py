@@ -188,17 +188,52 @@ def generate_question_with_ai(client, grade, term, topic_name, question_type, di
                 return None
 
         try:
-            # LaTeX 백슬래시 이스케이프 처리 (검증된 정규식 접근법)
+            # LaTeX 백슬래시 이스케이프 처리 (강화된 버전)
             import re
 
-            def fix_latex_in_json_string(match):
-                content = match.group(1)
-                # LaTeX 수식 패턴만 안전하게 이스케이프 (JSON에서 valid하지 않은 백슬래시들)
-                content = re.sub(r'(?<!\\)\\(?!["\\/bfnrt])', r'\\\\', content)
-                return f'"{content}"'
+            def fix_latex_backslashes(content):
+                # 1. 과도한 백슬래시 정리 (4개 이상 → 2개)
+                content = re.sub(r'\\{4,}', r'\\\\', content)
 
-            # JSON 문자열 값들에서만 백슬래시 처리
-            safe_json_content = re.sub(r'"([^"]*\\[^"]*)"', fix_latex_in_json_string, json_content)
+                # 2. LaTeX 명령어들을 올바르게 이스케이프
+                # \frac, \sqrt, \text 등의 LaTeX 명령어들
+                latex_commands = ['frac', 'sqrt', 'text', 'mathrm', 'times', 'cdot', 'pi', 'alpha', 'beta', 'gamma']
+                for cmd in latex_commands:
+                    # \cmd → \\cmd (JSON에서 안전한 형태)
+                    content = re.sub(f'\\\\{cmd}', f'\\\\\\\\{cmd}', content)
+
+                # 3. 일반적인 백슬래시 처리 (JSON 특수문자가 아닌 경우)
+                content = re.sub(r'(?<!\\\\)\\\\(?![\"\\\\\/bfnrt])', r'\\\\\\\\', content)
+
+                return content
+
+            def fix_svg_quotes(content):
+                # SVG 내부의 따옴표 문제 해결
+                # viewBox="..." → viewBox=\\"...\\"
+                content = re.sub(r'([a-zA-Z-]+)="([^"]*)"', r'\\1=\\\\"\\2\\\\"', content)
+                return content
+
+            # 전체 JSON 내용 처리
+            safe_json_content = json_content
+
+            # SVG 코드 부분 따로 처리
+            svg_match = re.search(r'"svg_code":\s*"([^"]*<svg[^"]*)"', safe_json_content)
+            if svg_match:
+                svg_content = svg_match.group(1)
+                fixed_svg = fix_svg_quotes(svg_content)
+                safe_json_content = safe_json_content.replace(svg_match.group(1), fixed_svg)
+
+            # JSON 문자열 값들의 LaTeX 처리
+            def process_json_string(match):
+                field_value = match.group(1)
+                if any(keyword in field_value for keyword in ['\\\\', 'frac', 'sqrt', 'text', 'mathrm']):
+                    # LaTeX가 포함된 문자열만 처리
+                    fixed_value = fix_latex_backslashes(field_value)
+                    return f'"{fixed_value}"'
+                return match.group(0)
+
+            # 모든 JSON 문자열 값 처리
+            safe_json_content = re.sub(r'"([^"]*(?:\\\\|frac|sqrt|text|mathrm)[^"]*)"', process_json_string, safe_json_content)
 
             question_data = json.loads(safe_json_content)
 
@@ -212,13 +247,25 @@ def generate_question_with_ai(client, grade, term, topic_name, question_type, di
             logging.error(f"JSON parsing error: {str(je)}")
             logging.error(f"Raw JSON content: {json_content}")
 
-            # 백업 파싱 시도 - 단순한 백슬래시 두 배 처리
+            # 백업 파싱 시도 - 강력한 정리 후 재시도
             try:
-                logging.info("Attempting backup JSON parsing with simple backslash doubling...")
-                backup_content = json_content.replace('\\', '\\\\')
-                # 과도하게 이스케이프된 것들 수정
-                backup_content = backup_content.replace('\\\\\\\\', '\\\\')
-                backup_content = backup_content.replace('\\\\"', '\\"')  # 따옴표는 원래대로
+                logging.info("Attempting backup JSON parsing with aggressive cleanup...")
+
+                # 1. 모든 백슬래시를 일단 정리
+                backup_content = json_content
+
+                # 2. 과도한 백슬래시들을 정리 (6개 이상 → 2개)
+                backup_content = re.sub(r'\\{6,}', r'\\\\', backup_content)
+                backup_content = re.sub(r'\\{4}', r'\\\\', backup_content)
+
+                # 3. LaTeX 명령어들을 간단하게 처리
+                backup_content = re.sub(r'\\\\\\\\(frac|sqrt|text|mathrm)', r'\\\\\\1', backup_content)
+
+                # 4. 홀수 개의 백슬래시 처리
+                backup_content = re.sub(r'(?<!\\\\)\\\\\\\\(?![\"\\\\\/bfnrt])', r'\\\\\\\\', backup_content)
+
+                # 5. SVG 속성의 따옴표 문제 해결
+                backup_content = re.sub(r'(\w+)=\\\\"([^"]*)\\\\"', r'\\1=\\"\\2\\"', backup_content)
 
                 question_data = json.loads(backup_content)
 
@@ -231,7 +278,22 @@ def generate_question_with_ai(client, grade, term, topic_name, question_type, di
 
             except json.JSONDecodeError as backup_je:
                 logging.error(f"Backup JSON parsing also failed: {str(backup_je)}")
-                return None
+
+                # 최후의 수단 - 매우 단순한 치환
+                try:
+                    logging.info("Final attempt with simple replacement...")
+                    final_content = json_content.replace('\\\\\\\\', '\\\\').replace('\\\\\\', '\\\\')
+
+                    question_data = json.loads(final_content)
+                    if 'svg_code' in question_data:
+                        question_data['svg_content'] = question_data.pop('svg_code')
+
+                    logging.info("Final JSON parsing successful")
+                    return question_data
+
+                except:
+                    logging.error("All JSON parsing attempts failed")
+                    return None
 
     except Exception as e:
         logging.error(f"AI question generation error: {str(e)}")

@@ -31,11 +31,11 @@ def get_learner_requirements(learner_id):
                 concept_name,
                 chapter_name,
                 difficulty_band,
-                topic_name,
-                unit_name
-            FROM vw_personal_item_enriched
+                recommended_level as topic_name,
+                concept_name as unit_name
+            FROM gold.vw_personal_item_enriched
             WHERE learnerID = ?
-            ORDER BY assessmentItemID
+            ORDER BY learnerID, assessmentItemID
         """, (learner_id,))
 
         results = cursor.fetchall()
