@@ -11,10 +11,13 @@ def get_sql_connection():
     """SQL Server 연결 초기화"""
     try:
         conn = pyodbc.connect(os.environ["SQL_CONNECTION"])
-        # 한글 처리를 위한 설정
+        # 강화된 한글/유니코드 처리 설정
         conn.setdecoding(pyodbc.SQL_CHAR, encoding='utf-8')
         conn.setdecoding(pyodbc.SQL_WCHAR, encoding='utf-8')
+        conn.setdecoding(pyodbc.SQL_WMETADATA, encoding='utf-8')
         conn.setencoding(encoding='utf-8')
+        # autocommit 설정으로 트랜잭션 문제 방지
+        conn.autocommit = True
         return conn
     except Exception as e:
         logging.error(f"SQL connection error: {str(e)}")
