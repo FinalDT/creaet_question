@@ -66,12 +66,14 @@ def create_question_prompt(grade, term, topic_name, question_type, difficulty, e
         - 기하: 각도, 길이, 넓이 표시
 
         SVG 사양 (태블릿 화면 최적화):
-        - 뷰박스 사용: viewBox="0 0 400 300" width="100%" height="auto"
+        - 뷰박스 사용: viewBox='0 0 400 300' width='100%' height='auto'
         - 반응형 디자인: 태블릿 화면에 맞게 자동 크기 조절
-        - 스타일: 검은색 선(stroke="#000" stroke-width="2"), 회색 채우기(fill="#f0f0f0")
-        - 텍스트: font-family="Arial" font-size="16" (태블릿용 크기)
+        - 스타일: 검은색 선(stroke='#000' stroke-width='2'), 회색 채우기(fill='#f0f0f0')
+        - 텍스트: font-family='Arial' font-size='16' (태블릿용 크기)
         - 격자, 축, 수치, 라벨 명확히 표시
         - 터치 친화적 요소 크기 (최소 44px 터치 영역)
+
+        🔴 **중요**: SVG 속성값에는 반드시 단일 인용부호(')를 사용하세요. 이중 인용부호(")는 JSON 파싱 오류를 일으킵니다!
 
         **각도 표현 중요 규칙**:
         - 각도를 시각적으로 그리지 마세요 (호나 부채꼴 금지)
@@ -91,9 +93,11 @@ def create_question_prompt(grade, term, topic_name, question_type, difficulty, e
         - 시각적 요소가 조금이라도 있으면: SVG 생성
 
         SVG 사양 (필요한 경우, 태블릿 최적화):
-        - 뷰박스 사용: viewBox="0 0 300 200" width="100%" height="auto"
-        - 스타일: 검은색 선(stroke="#000" stroke-width="2"), 회색 채우기(fill="#f0f0f0")
-        - 텍스트: font-family="Arial" font-size="14" (태블릿용)
+        - 뷰박스 사용: viewBox='0 0 300 200' width='100%' height='auto'
+        - 스타일: 검은색 선(stroke='#000' stroke-width='2'), 회색 채우기(fill='#f0f0f0')
+        - 텍스트: font-family='Arial' font-size='14' (태블릿용)
+
+        🔴 **중요**: SVG 속성값에는 반드시 단일 인용부호(')를 사용하세요!
 
         **각도 표현**: 시각적 각도 그리기 금지, 알파벳 라벨만 사용
         """
@@ -192,48 +196,51 @@ def generate_question_with_ai(client, grade, term, topic_name, question_type, di
             import re
 
             def fix_latex_backslashes(content):
-                # 1. 과도한 백슬래시 정리 (4개 이상 → 2개)
-                content = re.sub(r'\\{4,}', r'\\\\', content)
+                # 1. LaTeX 명령어들을 정확하게 이스케이프 (더 포괄적으로)
+                latex_commands = [
+                    'frac', 'sqrt', 'text', 'mathrm', 'times', 'cdot', 'pi', 'alpha', 'beta', 'gamma',
+                    'theta', 'phi', 'lambda', 'delta', 'omega', 'sigma', 'mu', 'nu', 'tau',
+                    'left', 'right', 'big', 'Big', 'bigg', 'Bigg'
+                ]
 
-                # 2. LaTeX 명령어들을 올바르게 이스케이프
-                # \frac, \sqrt, \text 등의 LaTeX 명령어들
-                latex_commands = ['frac', 'sqrt', 'text', 'mathrm', 'times', 'cdot', 'pi', 'alpha', 'beta', 'gamma']
                 for cmd in latex_commands:
-                    # \cmd → \\cmd (JSON에서 안전한 형태)
-                    content = re.sub(f'\\\\{cmd}', f'\\\\\\\\{cmd}', content)
+                    # \\cmd 패턴을 찾아서 \\\\cmd로 변경 (정확한 패턴 매칭)
+                    content = re.sub(f'\\\\\\\\{cmd}\\b', f'\\\\\\\\\\\\\\\\{cmd}', content)
 
-                # 3. 일반적인 백슬래시 처리 (JSON 특수문자가 아닌 경우)
-                content = re.sub(r'(?<!\\\\)\\\\(?![\"\\\\\/bfnrt])', r'\\\\\\\\', content)
+                # 2. LaTeX 괄호 구조도 처리
+                content = re.sub(r'\\\\(\(|\)|\[|\]|\{|\})', r'\\\\\\\\\\1', content)
+
+                # 3. 과도한 백슬래시 정리 (8개 이상 → 4개)
+                content = re.sub(r'\\{8,}', r'\\\\\\\\', content)
 
                 return content
 
-            def fix_svg_quotes(content):
-                # SVG 내부의 따옴표 문제 해결
-                # viewBox="..." → viewBox=\\"...\\"
-                content = re.sub(r'([a-zA-Z-]+)="([^"]*)"', r'\\1=\\\\"\\2\\\\"', content)
-                return content
 
             # 전체 JSON 내용 처리
             safe_json_content = json_content
 
-            # SVG 코드 부분 따로 처리
-            svg_match = re.search(r'"svg_code":\s*"([^"]*<svg[^"]*)"', safe_json_content)
-            if svg_match:
-                svg_content = svg_match.group(1)
-                fixed_svg = fix_svg_quotes(svg_content)
-                safe_json_content = safe_json_content.replace(svg_match.group(1), fixed_svg)
+            # SVG 속성의 이중 인용부호를 단일 인용부호로 변경 (근본 해결)
+            safe_json_content = re.sub(r'([a-zA-Z-]+)="([^"]*)"', r"\1='\2'", safe_json_content)
 
-            # JSON 문자열 값들의 LaTeX 처리
+            # JSON 문자열 값들의 LaTeX 처리 (확장된 조건)
             def process_json_string(match):
                 field_value = match.group(1)
-                if any(keyword in field_value for keyword in ['\\\\', 'frac', 'sqrt', 'text', 'mathrm']):
+                # LaTeX 키워드를 더 포괄적으로 검사
+                latex_keywords = [
+                    '\\\\', 'frac', 'sqrt', 'text', 'mathrm', 'times', 'cdot',
+                    'pi', 'alpha', 'beta', 'gamma', 'theta', 'phi', 'lambda',
+                    'delta', 'omega', 'sigma', 'left', 'right'
+                ]
+
+                if any(keyword in field_value for keyword in latex_keywords):
                     # LaTeX가 포함된 문자열만 처리
                     fixed_value = fix_latex_backslashes(field_value)
                     return f'"{fixed_value}"'
                 return match.group(0)
 
-            # 모든 JSON 문자열 값 처리
-            safe_json_content = re.sub(r'"([^"]*(?:\\\\|frac|sqrt|text|mathrm)[^"]*)"', process_json_string, safe_json_content)
+            # 모든 JSON 문자열 값을 더 포괄적으로 처리 (LaTeX 패턴 확장)
+            latex_pattern = r'"([^"]*(?:\\\\|frac|sqrt|text|mathrm|times|cdot|pi|alpha|beta|gamma|theta|phi|lambda|delta|omega|sigma|left|right)[^"]*)"'
+            safe_json_content = re.sub(latex_pattern, process_json_string, safe_json_content)
 
             question_data = json.loads(safe_json_content)
 
@@ -258,14 +265,16 @@ def generate_question_with_ai(client, grade, term, topic_name, question_type, di
                 backup_content = re.sub(r'\\{6,}', r'\\\\', backup_content)
                 backup_content = re.sub(r'\\{4}', r'\\\\', backup_content)
 
-                # 3. LaTeX 명령어들을 간단하게 처리
-                backup_content = re.sub(r'\\\\\\\\(frac|sqrt|text|mathrm)', r'\\\\\\1', backup_content)
+                # 3. LaTeX 명령어들을 포괄적으로 처리
+                latex_cmds = 'frac|sqrt|text|mathrm|times|cdot|pi|alpha|beta|gamma|theta|phi|lambda|delta|omega|sigma|left|right'
+                backup_content = re.sub(f'\\\\\\\\\\\\\\\\({latex_cmds})', r'\\\\\\\\\\1', backup_content)
+                backup_content = re.sub(f'\\\\\\\\({latex_cmds})', r'\\\\\\\\\\1', backup_content)
 
                 # 4. 홀수 개의 백슬래시 처리
                 backup_content = re.sub(r'(?<!\\\\)\\\\\\\\(?![\"\\\\\/bfnrt])', r'\\\\\\\\', backup_content)
 
-                # 5. SVG 속성의 따옴표 문제 해결
-                backup_content = re.sub(r'(\w+)=\\\\"([^"]*)\\\\"', r'\\1=\\"\\2\\"', backup_content)
+                # 5. SVG 속성을 단일 인용부호로 변경 (단순화된 해결책)
+                backup_content = re.sub(r'([a-zA-Z-]+)="([^"]*)"', r"\1='\2'", backup_content)
 
                 question_data = json.loads(backup_content)
 

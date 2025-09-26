@@ -18,13 +18,15 @@ AI를 활용해 한국 중학교 수학 문제를 자동으로 생성하는 Azur
 ├── modules/
 │   ├── handlers/                      # HTTP 요청 처리 계층
 │   │   ├── create_by_view_handler.py  # 뷰 기반 문제 생성 핸들러
-│   │   └── personalized_handler.py   # 개인화 문제 생성 핸들러
+│   │   ├── personalized_handler.py   # 개인화 문제 생성 핸들러
+│   │   └── rag_personalized_handler.py # RAG 기반 개인화 핸들러 ⭐
 │   ├── services/                      # 비즈니스 로직 계층
 │   │   ├── question_service.py       # 일반 문제 생성 서비스
 │   │   ├── connection_service.py     # 연결 테스트 서비스
 │   │   ├── bulk_service.py           # 대량 문제 생성 서비스
 │   │   ├── view_service.py           # 뷰 기반 문제 생성 서비스
-│   │   └── personalized_service.py   # 개인화 문제 생성 서비스
+│   │   ├── personalized_service.py   # 개인화 문제 생성 서비스
+│   │   └── rag_personalized_service.py # RAG 기반 개인화 서비스 ⭐
 │   └── core/                          # 공통 유틸리티 계층
 │       ├── ai_service.py             # AI 문제 생성 핵심 로직
 │       ├── database.py               # 데이터베이스 연결 및 쿼리
@@ -34,7 +36,9 @@ AI를 활용해 한국 중학교 수학 문제를 자동으로 생성하는 Azur
 │       ├── params.py                 # 요청 파라미터 처리
 │       └── debug.py                  # 디버깅 및 로깅
 ├── mapping/                           # 개념 매핑 유틸리티
-└── scripts/                          # 추가 스크립트
+├── scripts/                          # 추가 스크립트
+├── 트러블슈팅로그.md                  # 문제 해결 기록 ⭐
+└── README_환경설정.md                 # 환경 설정 가이드
 ```
 
 ## 🚀 API 엔드포인트
@@ -215,7 +219,7 @@ GET /api/create_by_view
 
 ---
 
-### 5. 👤 개인화 문제 생성 - `/api/create_personalized` ⭐ **최신 추가**
+### 5. 👤 개인화 문제 생성 - `/api/create_personalized`
 
 **목적**: 특정 learnerID의 모든 학습 요구사항에 맞는 개인화 문제를 생성합니다.
 
@@ -280,6 +284,86 @@ GET /api/create_personalized?learnerID=12345
 
 ---
 
+### 6. 🧠 RAG 기반 개인화 문제 생성 - `/api/create_by_view_rag_personalized` ⭐ **최신 추가**
+
+**목적**: 학습자 성취도 데이터를 기반으로 한 진정한 RAG(Retrieval-Augmented Generation) 방식의 개인화 문제를 생성합니다.
+
+#### 📥 요청 방법
+```http
+GET /api/create_by_view_rag_personalized?grade=2
+POST /api/create_by_view_rag_personalized?grade=2
+POST /api/create_by_view_rag_personalized
+Content-Type: application/json
+
+{
+  "grade": 2
+}
+```
+
+#### 📋 파라미터
+- `grade` (필수): 중학교 학년 (1, 2, 3)
+
+#### 🔄 RAG 처리 과정
+1. **Retrieval (검색)**: 정답률 55-70% 목표로 Top-3 개념 검색
+2. **Augmentation (증강)**: 검색된 데이터를 AI가 이해할 수 있는 구조화된 컨텍스트로 변환
+3. **Generation (생성)**: 증강된 컨텍스트를 바탕으로 6개 개인화 문제 생성
+
+#### 📤 응답 예시
+```json
+{
+  "success": true,
+  "data": {
+    "generated_questions": [
+      {
+        "assessmentItemID": "MATH_001",
+        "concept_name": "이차방정식",
+        "question_text": "다음 이차방정식의 해를 구하시오: x² - 5x + 6 = 0",
+        "choices": [
+          "① x = 2, 3",
+          "② x = 1, 6",
+          "③ x = -2, -3",
+          "④ x = 2, -3"
+        ],
+        "answer": "①",
+        "explanation": "인수분해하면 (x-2)(x-3) = 0이므로 x = 2, 3입니다.",
+        "svg_content": null,
+        "metadata": {
+          "grade": 8,
+          "term": 2,
+          "concept_name": "이차방정식",
+          "chapter_name": "이차방정식 > 이차방정식의 풀이",
+          "difficulty_band": "상",
+          "knowledge_tag": "대수"
+        }
+      }
+      // ... 총 6개 문제
+    ],
+    "total_generated": 6,
+    "concepts_used": 3,
+    "grade_info": {
+      "korean_grade": 2,
+      "international_grade": 8,
+      "grade_description": "중학교 2학년"
+    },
+    "retrieval_strategy": "top3_with_backup",
+    "target_accuracy_range": "0.55-0.70"
+  }
+}
+```
+
+#### 🎯 RAG의 핵심 특징
+- **스마트 검색**: 학습자 성취도 기반으로 적절한 난이도 개념 선택
+- **구조화된 컨텍스트**: 검색된 데이터를 AI가 정확히 이해할 수 있는 형태로 변환
+- **일관성 보장**: 기존 assessment 데이터와 연결된 문제 생성
+- **개인화된 난이도**: 개념별 자동 난이도 할당 (상/중/하)
+
+#### 💡 사용 사례
+- **학습 진단**: 학습자의 약한 부분을 정확히 파악하여 맞춤 문제 제공
+- **적응형 학습**: 성취도에 따라 자동으로 조절되는 문제 난이도
+- **효율적 복습**: 개인별 학습 데이터를 활용한 최적화된 문제 세트
+
+---
+
 ## 🛠️ 기술 스택
 
 ### 백엔드
@@ -289,9 +373,10 @@ GET /api/create_personalized?learnerID=12345
 - **pyodbc**: SQL Server 데이터베이스 연결
 
 ### 프론트엔드 지원
-- **RESTful API**: 표준 HTTP 메서드 지원
+- **RESTful API**: 표준 HTTP 메서드 지원 (GET, POST, OPTIONS)
 - **JSON 응답**: 웹/앱에서 쉬운 파싱
-- **CORS 지원**: 크로스 도메인 요청 허용
+- **CORS 지원**: 크로스 도메인 요청 허용 (3000포트 전용)
+- **다양한 요청 방식**: URL 파라미터, JSON Body 모두 지원
 
 ### 시각화
 - **SVG**: 수학 도형/그래프 벡터 이미지
@@ -340,8 +425,10 @@ func azure functionapp publish your-function-app-name
 
 ### 3. 🎯 개인화 학습
 - **learnerID 기반**: 개별 학습자의 요구사항에 정확히 맞춤
+- **RAG 기반 개인화**: 학습자 성취도 데이터를 활용한 진정한 개인화
 - **동적 문제 수**: 학습자 데이터만큼 유연하게 문제 생성
 - **학습 진도 반영**: assessmentItemID와 knowledgeTag 기반 맞춤 생성
+- **스마트 난이도 조절**: 개념별 자동 난이도 할당으로 최적화된 학습 경험
 
 ### 4. 🔄 모듈러 아키텍처
 - **3계층 구조**: Handlers(HTTP) → Services(비즈니스) → Core(유틸리티)
@@ -352,19 +439,35 @@ func azure functionapp publish your-function-app-name
 
 ### 웹 애플리케이션에서 사용
 ```javascript
-// 개인화 문제 가져오기
-const response = await fetch('/api/create_personalized?learnerID=12345');
+// RAG 기반 개인화 문제 생성 (권장)
+const response = await fetch('http://localhost:7071/api/create_by_view_rag_personalized?grade=2', {
+  method: 'POST'
+});
 const data = await response.json();
 
 // 생성된 문제들 표시
-data.generated_questions.forEach(question => {
+data.data.generated_questions.forEach(question => {
     displayQuestion(question);
 });
+
+// 기존 개인화 문제 생성
+const response2 = await fetch('http://localhost:7071/api/create_personalized?learnerID=12345');
+const data2 = await response2.json();
 ```
 
 ### 모바일 앱에서 사용
 ```dart
-// Flutter 예시
+// Flutter 예시 - RAG 기반 개인화 문제 생성
+Future<List<Question>> getRAGPersonalizedQuestions(int grade) async {
+  final response = await http.post(
+    Uri.parse('$baseUrl/api/create_by_view_rag_personalized?grade=$grade')
+  );
+
+  final data = json.decode(response.body);
+  return data['data']['generated_questions'].map((q) => Question.fromJson(q)).toList();
+}
+
+// 기존 개인화 문제 생성
 Future<List<Question>> getPersonalizedQuestions(String learnerId) async {
   final response = await http.get(
     Uri.parse('$baseUrl/api/create_personalized?learnerID=$learnerId')
@@ -405,11 +508,16 @@ Future<List<Question>> getPersonalizedQuestions(String learnerId) async {
 
 ## 📈 향후 계획
 
+- [x] **RAG 기반 개인화 문제 생성** - 완료 ✅
+- [x] **CORS 지원 및 프론트엔드 연동** - 완료 ✅
+- [x] **학년별 파라미터 처리** - 완료 ✅
 - [ ] 문제 난이도 자동 조절 알고리즘 개선
 - [ ] 더 다양한 문제 유형 지원 (증명, 작도 등)
 - [ ] 실시간 문제 품질 평가 시스템
 - [ ] 학습자 피드백 기반 개인화 강화
 - [ ] 멀티미디어 요소 추가 (동영상 해설 등)
+- [ ] RAG 검색 알고리즘 고도화
+- [ ] 다국어 지원 (영어, 중국어 등)
 
 ## 🤝 기여 방법
 

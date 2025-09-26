@@ -34,6 +34,17 @@ def create_personalized(req: func.HttpRequest) -> func.HttpResponse:
     return handle_create_personalized(req)
 
 
-@app.route(route="create_by_view_rag_personalized", methods=["GET", "POST"])
+@app.route(route="create_by_view_rag_personalized", methods=["GET", "POST", "OPTIONS"])
 def create_by_view_rag_personalized(req: func.HttpRequest) -> func.HttpResponse:
+    # CORS preflight 요청 처리
+    if req.method == "OPTIONS":
+        return func.HttpResponse(
+            "",
+            status_code=200,
+            headers={
+                "Access-Control-Allow-Origin": "http://localhost:3000",
+                "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization"
+            }
+        )
     return handle_create_by_view_rag_personalized(req)
