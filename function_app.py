@@ -14,7 +14,7 @@ def create_question(req: func.HttpRequest) -> func.HttpResponse:
     return handle_create_question(req)
 
 
-@app.route(route="test_connections", methods=["GET", "POST"])
+@app.route(route="test_connections", methods=["GET", "POST"], auth_level=func.AuthLevel.ANONYMOUS)
 def test_connections(req: func.HttpRequest) -> func.HttpResponse:
     return handle_test_connections(req)
 
