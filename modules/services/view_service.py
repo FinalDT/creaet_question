@@ -38,16 +38,30 @@ def get_sample_learner_requirements(limit=5):
         conn.close()
 
         if results:
+            def safe_decode(value):
+                """안전한 문자열 디코딩"""
+                if value is None:
+                    return None
+                if isinstance(value, bytes):
+                    try:
+                        return value.decode('utf-8')
+                    except UnicodeDecodeError:
+                        try:
+                            return value.decode('cp949')
+                        except UnicodeDecodeError:
+                            return value.decode('utf-8', errors='ignore')
+                return str(value)
+
             return [
                 {
                     'learner_id': result[0],
                     'assessment_item_id': result[1],
-                    'knowledge_tag': result[2],
+                    'knowledge_tag': safe_decode(result[2]),
                     'grade': result[3],
                     'term': result[4],
-                    'concept_name': result[5],
-                    'chapter_name': result[6],
-                    'difficulty_band': result[7],
+                    'concept_name': safe_decode(result[5]),
+                    'chapter_name': safe_decode(result[6]),
+                    'difficulty_band': safe_decode(result[7]),
                     'recommended_level': result[8]
                 }
                 for result in results
@@ -88,17 +102,31 @@ def get_learner_requirements(learner_id):
         conn.close()
 
         if results:
+            def safe_decode(value):
+                """안전한 문자열 디코딩"""
+                if value is None:
+                    return None
+                if isinstance(value, bytes):
+                    try:
+                        return value.decode('utf-8')
+                    except UnicodeDecodeError:
+                        try:
+                            return value.decode('cp949')
+                        except UnicodeDecodeError:
+                            return value.decode('utf-8', errors='ignore')
+                return str(value)
+
             requirements = []
             for row in results:
                 requirements.append({
                     'learner_id': row[0],
                     'assessment_item_id': row[1],
-                    'knowledge_tag': row[2],
+                    'knowledge_tag': safe_decode(row[2]),
                     'grade': row[3],
                     'term': row[4],
-                    'concept_name': row[5],
-                    'chapter_name': row[6],
-                    'difficulty_band': row[7],
+                    'concept_name': safe_decode(row[5]),
+                    'chapter_name': safe_decode(row[6]),
+                    'difficulty_band': safe_decode(row[7]),
                     'recommended_level': row[8]
                 })
 

@@ -50,11 +50,42 @@ class RAGDataRetriever:
             # 3단계: 샘플 데이터 확인
             if grade_count > 0:
                 try:
-                    cursor.execute(f"SELECT TOP 3 CAST(concept_name AS NVARCHAR(MAX)) as concept_name, is_correct FROM gold.vw_personal_item_enriched WHERE grade = {grade}")
+                    def safe_decode(value):
+                        """초강력 한글 디코딩"""
+                        if value is None:
+                            return "None"
+
+                        # 이미 문자열이면 그대로 반환
+                        if isinstance(value, str):
+                            return value
+
+                        # bytes인 경우 여러 인코딩 시도
+                        if isinstance(value, bytes):
+                            encodings = ['utf-8', 'cp949', 'euc-kr', 'utf-16', 'ascii']
+                            for encoding in encodings:
+                                try:
+                                    return value.decode(encoding)
+                                except (UnicodeDecodeError, UnicodeError):
+                                    continue
+                            # 모든 인코딩 실패시 에러 무시하고 변환
+                            return value.decode('utf-8', errors='replace')
+
+                        # 기타 타입은 문자열로 변환
+                        try:
+                            return str(value)
+                        except:
+                            return "변환실패"
+
+                    cursor.execute(f"SELECT TOP 3 ISNULL(TRY_CAST(concept_name AS NVARCHAR(MAX)), 'Unknown') as concept_name, is_correct FROM gold.vw_personal_item_enriched WHERE grade = {grade}")
                     sample_data = cursor.fetchall()
                     print(f"      [데이터조회] 샘플 데이터:")
                     for i, (concept, is_correct) in enumerate(sample_data):
-                        print(f"         {i+1}. {concept} | is_correct: {is_correct}")
+                        try:
+                            safe_concept = safe_decode(concept)
+                            print(f"         {i+1}. {safe_concept} | is_correct: {is_correct}")
+                        except Exception as decode_error:
+                            print(f"         {i+1}. [디코딩 실패: {str(decode_error)}] | is_correct: {is_correct}")
+                            safe_concept = "디코딩_실패"
                 except Exception as e:
                     print(f"      [데이터조회] 샘플 데이터 쿼리 실패: {str(e)}")
 
@@ -64,9 +95,9 @@ class RAGDataRetriever:
                     WITH primary_chapters AS (
                         SELECT
                             CASE
-                                WHEN CHARINDEX('>', CAST(chapter_name AS NVARCHAR(MAX))) > 0
-                                THEN LTRIM(RTRIM(SUBSTRING(CAST(chapter_name AS NVARCHAR(MAX)), 1, CHARINDEX('>', CAST(chapter_name AS NVARCHAR(MAX))) - 1)))
-                                ELSE CAST(chapter_name AS NVARCHAR(MAX))
+                                WHEN CHARINDEX('>', ISNULL(TRY_CAST(chapter_name AS NVARCHAR(MAX)), 'Unknown')) > 0
+                                THEN LTRIM(RTRIM(SUBSTRING(ISNULL(TRY_CAST(chapter_name AS NVARCHAR(MAX)), 'Unknown'), 1, CHARINDEX('>', ISNULL(TRY_CAST(chapter_name AS NVARCHAR(MAX)), 'Unknown')) - 1)))
+                                ELSE ISNULL(TRY_CAST(chapter_name AS NVARCHAR(MAX)), 'Unknown')
                             END as primary_chapter,
                             CAST(is_correct AS FLOAT) as is_correct
                         FROM gold.vw_personal_item_enriched
@@ -96,13 +127,48 @@ class RAGDataRetriever:
                 conn.close()
 
                 if results:
+                    def safe_decode(value):
+                        """초강력 한글 디코딩"""
+                        if value is None:
+                            return "None"
+
+                        # 이미 문자열이면 그대로 반환
+                        if isinstance(value, str):
+                            return value
+
+                        # bytes인 경우 여러 인코딩 시도
+                        if isinstance(value, bytes):
+                            encodings = ['utf-8', 'cp949', 'euc-kr', 'utf-16', 'ascii']
+                            for encoding in encodings:
+                                try:
+                                    return value.decode(encoding)
+                                except (UnicodeDecodeError, UnicodeError):
+                                    continue
+                            # 모든 인코딩 실패시 에러 무시하고 변환
+                            return value.decode('utf-8', errors='replace')
+
+                        # 기타 타입은 문자열로 변환
+                        try:
+                            return str(value)
+                        except:
+                            return "변환실패"
+
                     concepts = []
                     for result in results:
-                        concepts.append({
-                            'primary_chapter': result[0],
-                            'avg_correct_rate': result[1],
-                            'item_count': result[2]
-                        })
+                        try:
+                            safe_chapter = safe_decode(result[0])
+                            if safe_chapter and safe_chapter.strip() and safe_chapter != 'Unknown':
+                                concepts.append({
+                                    'primary_chapter': safe_chapter,
+                                    'avg_correct_rate': result[1],
+                                    'item_count': result[2]
+                                })
+                                print(f"         ✓ 추가된 개념: {safe_chapter} (정답률: {result[1]:.3f})")
+                            else:
+                                print(f"         ✗ 스킵된 개념: {safe_chapter} (빈 값 또는 Unknown)")
+                        except Exception as decode_error:
+                            print(f"         ✗ 디코딩 실패 스킵: {str(decode_error)}")
+                            continue
 
                     selected_concepts = concepts[:top_k] if len(concepts) >= top_k else concepts
                     print(f"      [데이터조회] 최종 선택된 개념: {len(selected_concepts)}개")
